@@ -52,14 +52,15 @@ var opts struct {
 	KeepHost            bool     `long:"keep-host" env:"KEEP_HOST" description:"pass the Host header from the client as-is, instead of rewriting it"`
 
 	SSL struct {
-		Type          string   `long:"type" env:"TYPE" description:"ssl (auto) support" choice:"none" choice:"static" choice:"auto" default:"none"` // nolint
-		Cert          string   `long:"cert" env:"CERT" description:"path to cert.pem file"`
-		Key           string   `long:"key" env:"KEY" description:"path to key.pem file"`
-		ACMEDirectory string   `long:"acme-directory" env:"ACME_DIRECTORY" description:"ACME directory to use" default:"https://acme-v02.api.letsencrypt.org/directory"`
-		ACMELocation  string   `long:"acme-location" env:"ACME_LOCATION" description:"dir where certificates will be stored by autocert manager" default:"./var/acme"`
-		ACMEEmail     string   `long:"acme-email" env:"ACME_EMAIL" description:"admin email for certificate notifications"`
-		RedirHTTPPort int      `long:"http-port" env:"HTTP_PORT" description:"http port for redirect to https and acme challenge test (default: 8080 under docker, 80 without)"`
-		FQDNs         []string `long:"fqdn" env:"ACME_FQDN" env-delim:"," description:"FQDN(s) for ACME certificates"`
+		Type           string   `long:"type" env:"TYPE" description:"ssl (auto) support" choice:"none" choice:"static" choice:"auto" default:"none"` // nolint
+		Cert           string   `long:"cert" env:"CERT" description:"path to cert.pem file"`
+		Key            string   `long:"key" env:"KEY" description:"path to key.pem file"`
+		ACMEDirectory  string   `long:"acme-directory" env:"ACME_DIRECTORY" description:"ACME directory to use" default:"https://acme-v02.api.letsencrypt.org/directory"`
+		ACMELocation   string   `long:"acme-location" env:"ACME_LOCATION" description:"dir where certificates will be stored by autocert manager" default:"./var/acme"`
+		ACMEEmail      string   `long:"acme-email" env:"ACME_EMAIL" description:"admin email for certificate notifications"`
+		RedirHTTPPort  int      `long:"http-port" env:"HTTP_PORT" description:"http port for redirect to https and acme challenge test (default: 8080 under docker, 80 without)"`
+		NoHTTPRedirect bool     `long:"no-redirect" env:"NO_REDIRECT" description:"disable http to https redirect"`
+		FQDNs          []string `long:"fqdn" env:"ACME_FQDN" env-delim:"," description:"FQDN(s) for ACME certificates"`
 		DNS           struct {
 			Type       string        `long:"type" env:"TYPE" description:"DNS provider type" choice:"none" choice:"cloudflare" choice:"route53" choice:"gandi" choice:"digitalocean" choice:"hetzner" choice:"linode" choice:"godaddy" choice:"namecheap" choice:"scaleway" choice:"porkbun" choice:"dnsimple" choice:"duckdns" default:"none"` // nolint
 			TTL        time.Duration `long:"ttl" env:"TTL" default:"2m" description:"DNS record TTL"`
@@ -484,6 +485,7 @@ func makeSSLConfig() (config proxy.SSLConfig, err error) {
 		config.Cert = opts.SSL.Cert
 		config.Key = opts.SSL.Key
 		config.RedirHTTPPort = redirHTTPPort(opts.SSL.RedirHTTPPort)
+		config.NoHTTPRedirect = opts.SSL.NoHTTPRedirect
 	case "auto":
 		config.SSLMode = proxy.SSLAuto
 		config.ACMEDirectory = opts.SSL.ACMEDirectory
@@ -491,6 +493,7 @@ func makeSSLConfig() (config proxy.SSLConfig, err error) {
 		config.ACMEEmail = opts.SSL.ACMEEmail
 		config.FQDNs = fqdns(opts.SSL.FQDNs)
 		config.RedirHTTPPort = redirHTTPPort(opts.SSL.RedirHTTPPort)
+		config.NoHTTPRedirect = opts.SSL.NoHTTPRedirect
 		config.TTL = opts.SSL.DNS.TTL
 		switch opts.SSL.DNS.Type {
 		case "cloudflare":
