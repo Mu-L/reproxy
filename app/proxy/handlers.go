@@ -28,9 +28,9 @@ func headersHandler(addHeaders, dropHeaders []string) func(next http.Handler) ht
 			// add headers to response
 			for _, h := range addHeaders {
 				// split on first colon only
-				if i := strings.Index(h, ":"); i >= 0 {
-					key := strings.TrimSpace(h[:i])
-					value := strings.TrimSpace(h[i+1:])
+				if key, value, ok := strings.Cut(h, ":"); ok {
+					key = strings.TrimSpace(key)
+					value = strings.TrimSpace(value)
 					if key != "" {
 						w.Header().Set(key, value)
 					}

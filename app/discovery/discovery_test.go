@@ -178,6 +178,70 @@ func TestService_Match(t *testing.T) {
 	}
 }
 
+func TestService_MatchMultipleStaticSites(t *testing.T) {
+	// reproduces issue #243: two servers with assets:true routes should serve from different directories
+	p := &ProviderMock{
+		EventsFunc: func(ctx context.Context) <-chan ProviderID {
+			res := make(chan ProviderID, 1)
+			res <- PIFile
+			return res
+		},
+		ListFunc: func() ([]URLMapper, error) {
+			// simulates file provider output with assets:true (no AssetsWebRoot/AssetsLocation set,
+			// extendMapper fills them from route and dest)
+			return []URLMapper{
+				// regex route - this is what the user tried, should NOT match (broken config)
+				{Server: "regex-ru", SrcMatch: *regexp.MustCompile("^/.*"), Dst: "/www/ru/",
+					ProviderID: PIFile, MatchType: MTStatic},
+				// path prefix route - this is the correct config
+				{Server: "prefix-ru", SrcMatch: *regexp.MustCompile("/"), Dst: "/www/ru/",
+					ProviderID: PIFile, MatchType: MTStatic},
+				{Server: "prefix-en", SrcMatch: *regexp.MustCompile("/"), Dst: "/www/en/",
+					ProviderID: PIFile, MatchType: MTStatic},
+			}, nil
+		},
+	}
+
+	svc := NewService([]Provider{p}, time.Millisecond*100)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	err := svc.Run(ctx)
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	tbl := []struct {
+		server, src string
+		res         Matches
+	}{
+		// regex route "^/.*" doesn't work for static assets - AssetsWebRoot becomes "^/.*" literal
+		{"regex-ru", "/index.html", Matches{MatchType: MTProxy, Routes: nil}},
+
+		// path prefix routes work correctly per server
+		{"prefix-ru", "/index.html", Matches{MTStatic, []MatchedRoute{{Destination: "/:/www/ru/:norm", Alive: true}}}},
+		{"prefix-ru", "/", Matches{MTStatic, []MatchedRoute{{Destination: "/:/www/ru/:norm", Alive: true}}}},
+		{"prefix-ru", "/sub/page.html", Matches{MTStatic, []MatchedRoute{{Destination: "/:/www/ru/:norm", Alive: true}}}},
+		{"prefix-en", "/index.html", Matches{MTStatic, []MatchedRoute{{Destination: "/:/www/en/:norm", Alive: true}}}},
+		{"prefix-en", "/", Matches{MTStatic, []MatchedRoute{{Destination: "/:/www/en/:norm", Alive: true}}}},
+
+		// wrong server doesn't match
+		{"prefix-ru", "/index.html", Matches{MTStatic, []MatchedRoute{{Destination: "/:/www/ru/:norm", Alive: true}}}},
+		{"other-server", "/index.html", Matches{MatchType: MTProxy, Routes: nil}},
+	}
+
+	for i, tt := range tbl {
+		t.Run(fmt.Sprintf("%d-%s-%s", i, tt.server, tt.src), func(t *testing.T) {
+			res := svc.Match(tt.server, tt.src)
+			require.Len(t, res.Routes, len(tt.res.Routes), "routes mismatch for %s %s", tt.server, tt.src)
+			for j := range res.Routes {
+				assert.Equal(t, tt.res.Routes[j].Destination, res.Routes[j].Destination)
+				assert.Equal(t, tt.res.Routes[j].Alive, res.Routes[j].Alive)
+			}
+			assert.Equal(t, tt.res.MatchType, res.MatchType)
+		})
+	}
+}
+
 func TestService_MatchServerRegex(t *testing.T) {
 	mockProvider := &ProviderMock{
 		EventsFunc: func(ctx context.Context) <-chan ProviderID {

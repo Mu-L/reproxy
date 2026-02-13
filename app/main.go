@@ -388,7 +388,7 @@ func makeProviders() ([]discovery.Provider, error) {
 	var res []discovery.Provider
 
 	if opts.Static.Enabled {
-		var msgs []string
+		msgs := make([]string, 0, len(opts.Static.Rules))
 		for _, rule := range opts.Static.Rules {
 			msgs = append(msgs, "\""+rule+"\"")
 		}

@@ -96,12 +96,23 @@ default: # the same as * (catch-all) server
     }
 srv.example.com:
   - { route: "^/api/svc2/(.*)", dest: "http://127.0.0.2:8080/blah2/$1/abc" }
-  - { route: "^/web/", dest: "/var/www", "assets": true }
+  - { route: "/web/", dest: "/var/www", "assets": true }
 "*.files.example.com":
   - { route: "^/files/(.*)", dest: "http://123.123.200.200:8080/$host/$1" }
 ```
 
 This is a dynamic provider and file change will be applied automatically.
+
+**Multiple static sites on different domains** can be served by using server names as keys with `assets: true`:
+
+```yaml
+site-en.example.com:
+  - { route: "/", dest: "/var/www/en", "assets": true }
+site-ru.example.com:
+  - { route: "/", dest: "/var/www/ru", "assets": true }
+```
+
+**Important:** the `route` field for asset rules must be a path prefix (e.g., `/`, `/web/`), not a regex. Regex patterns like `^/(.*)` won't work with `assets: true` because static asset matching uses path prefix comparison, not regex.
 
 ### Docker provider
 
@@ -253,9 +264,9 @@ Users may turn the assets server on (off by default) to serve static files. As l
 
 In addition to the common assets server, multiple custom assets servers are supported. Each provider has a different way to define such a static rule, and some providers may not support it at all. For example, multiple asset servers make sense in static (command line provider), file provider, and even useful with docker providers, however it makes very little sense with consul catalog provider.
 
-1. static provider - if source element prefixed by `assets:` or `spa:` it will be treated as file-server. For example `*,assets:/web,/var/www,` will serve all `/web/*` request with a file server on top of `/var/www` directory. 
-2. file provider - setting optional fields `assets: true` or `spa: true`
-3. docker provider - `reproxy.assets=web-root:location`, i.e. `reproxy.assets=/web:/var/www`. Switching to spa mode done by setting `reproxy.spa` to `yes` or `true` 
+1. static provider - if source element prefixed by `assets:` or `spa:` it will be treated as file-server. For example `*,assets:/web,/var/www,` will serve all `/web/*` request with a file server on top of `/var/www` directory.
+2. file provider - setting optional fields `assets: true` or `spa: true`. Note: the `route` field must be a path prefix (e.g., `/`, `/web/`), not a regex pattern.
+3. docker provider - `reproxy.assets=web-root:location`, i.e. `reproxy.assets=/web:/var/www`. Switching to spa mode done by setting `reproxy.spa` to `yes` or `true`
 
 ### Caching
 
