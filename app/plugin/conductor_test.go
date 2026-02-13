@@ -1,4 +1,4 @@
-package plugin //nolint:revive // package name matches directory structure
+package plugin
 
 import (
 	"bytes"
