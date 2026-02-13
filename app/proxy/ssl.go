@@ -33,10 +33,11 @@ const (
 
 // SSLConfig holds all ssl params for rest server
 type SSLConfig struct {
-	SSLMode       sslMode
-	Cert          string
-	Key           string
-	RedirHTTPPort int
+	SSLMode        sslMode
+	Cert           string
+	Key            string
+	RedirHTTPPort  int
+	NoHTTPRedirect bool // disable http to https redirect server
 
 	ACMEDirectory string                // URL of the ACME directory to use
 	ACMELocation  string                // directory where the obtained certificates are stored
@@ -60,6 +61,16 @@ func (h *Http) httpToHTTPSRouter() http.Handler {
 func (h *Http) httpChallengeRouter(m AutocertManager) http.Handler {
 	log.Printf("[DEBUG] create http-challenge routes")
 	return R.Wrap(m.HTTPHandler(h.redirectHandler()), R.Recoverer(log.Default()))
+}
+
+// httpChallengeOnlyRouter creates new router which performs ACME "http-01" challenge response only.
+// Non-challenge requests get 404 instead of redirect. Used in 'auto' ssl mode with --ssl.no-redirect.
+func (h *Http) httpChallengeOnlyRouter(m AutocertManager) http.Handler {
+	log.Printf("[DEBUG] create http-challenge-only routes (no redirect)")
+	notFound := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
+	return R.Wrap(m.HTTPHandler(notFound), R.Recoverer(log.Default()))
 }
 
 func (h *Http) redirectHandler() http.Handler {

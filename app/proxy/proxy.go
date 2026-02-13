@@ -173,14 +173,18 @@ func (h *Http) Run(ctx context.Context) error {
 		httpsServer = h.makeHTTPSServer(h.Address, handler)
 		httpsServer.ErrorLog = log.ToStdLogger(log.Default(), "WARN")
 
-		httpServer = h.makeHTTPServer(h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort), h.httpToHTTPSRouter())
-		httpServer.ErrorLog = log.ToStdLogger(log.Default(), "WARN")
+		if !h.SSLConfig.NoHTTPRedirect {
+			httpServer = h.makeHTTPServer(h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort), h.httpToHTTPSRouter())
+			httpServer.ErrorLog = log.ToStdLogger(log.Default(), "WARN")
 
-		go func() {
-			log.Printf("[INFO] activate http redirect server on %s", h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort))
-			err := httpServer.ListenAndServe()
-			log.Printf("[WARN] http redirect server terminated, %s", err)
-		}()
+			go func() {
+				log.Printf("[INFO] activate http redirect server on %s", h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort))
+				err := httpServer.ListenAndServe()
+				log.Printf("[WARN] http redirect server terminated, %s", err)
+			}()
+		} else {
+			log.Printf("[INFO] http to https redirect disabled")
+		}
 		if err := httpsServer.ListenAndServeTLS(h.SSLConfig.Cert, h.SSLConfig.Key); err != nil {
 			return fmt.Errorf("https static server failed: %w", err)
 		}
@@ -193,14 +197,27 @@ func (h *Http) Run(ctx context.Context) error {
 		httpsServer = h.makeHTTPSAutocertServer(h.Address, handler, m)
 		httpsServer.ErrorLog = log.ToStdLogger(log.Default(), "WARN")
 
-		httpServer = h.makeHTTPServer(h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort), h.httpChallengeRouter(m))
-		httpServer.ErrorLog = log.ToStdLogger(log.Default(), "WARN")
-
-		go func() {
-			log.Printf("[INFO] activate http challenge server on port %s", h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort))
-			err := httpServer.ListenAndServe()
-			log.Printf("[WARN] http challenge server terminated, %s", err)
-		}()
+		if h.SSLConfig.NoHTTPRedirect && h.SSLConfig.DNSProvider != nil {
+			log.Printf("[INFO] http to https redirect disabled, dns-01 challenge mode, no http server needed")
+		} else if h.SSLConfig.NoHTTPRedirect {
+			// http-01 challenges still need an http server, but without redirect
+			httpServer = h.makeHTTPServer(h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort), h.httpChallengeOnlyRouter(m))
+			httpServer.ErrorLog = log.ToStdLogger(log.Default(), "WARN")
+			go func() {
+				log.Printf("[INFO] activate http challenge-only server on %s (no redirect)",
+					h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort))
+				err := httpServer.ListenAndServe()
+				log.Printf("[WARN] http challenge server terminated, %s", err)
+			}()
+		} else {
+			httpServer = h.makeHTTPServer(h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort), h.httpChallengeRouter(m))
+			httpServer.ErrorLog = log.ToStdLogger(log.Default(), "WARN")
+			go func() {
+				log.Printf("[INFO] activate http challenge server on port %s", h.toHTTP(h.Address, h.SSLConfig.RedirHTTPPort))
+				err := httpServer.ListenAndServe()
+				log.Printf("[WARN] http challenge server terminated, %s", err)
+			}()
+		}
 
 		if err := httpsServer.ListenAndServeTLS("", ""); err != nil {
 			return fmt.Errorf("https auto server failed: %w", err)

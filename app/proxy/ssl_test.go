@@ -47,6 +47,55 @@ func TestSSL_Redirect(t *testing.T) {
 	assert.Equal(t, "https://localhost/blah?param=1", resp.Header.Get("Location"))
 }
 
+func TestSSL_httpChallengeOnlyRouter(t *testing.T) {
+	log.Setup(log.Debug, log.LevelBraces)
+
+	dir, err := os.MkdirTemp("", "acme")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	var tsURL string
+	cas := acmetest.NewACMEServer(t,
+		acmetest.ModifyRequest(func(r *http.Request) {
+			r.URL.Host = strings.TrimPrefix(tsURL, "http://")
+		}),
+	)
+
+	httpListener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	_, httpPortStr, err := net.SplitHostPort(httpListener.Addr().String())
+	require.NoError(t, err)
+	httpPort, err := strconv.Atoi(httpPortStr)
+	require.NoError(t, err)
+	httpListener.Close()
+
+	p := Http{
+		SSLConfig: SSLConfig{
+			ACMELocation:  dir,
+			FQDNs:         []string{"example.com", "localhost"},
+			ACMEDirectory: cas.URL(),
+			RedirHTTPPort: httpPort,
+		},
+	}
+
+	m := p.makeAutocertManager()
+
+	ts := httptest.NewServer(p.httpChallengeOnlyRouter(m))
+	defer ts.Close()
+	tsURL = ts.URL
+
+	client := http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+
+	// non-challenge request should get 404, not redirect
+	lh := strings.Replace(ts.URL, "127.0.0.1", "localhost", 1)
+	resp, err := client.Get(lh + "/blah?param=1")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
 func TestSSL_ACME_HTTPChallengeRouter(t *testing.T) {
 	log.Setup(log.Debug, log.LevelBraces)
 

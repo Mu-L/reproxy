@@ -582,6 +582,31 @@ func Test_makeSSLConfig(t *testing.T) {
 		assert.NotNil(t, cfg.DNSProvider)
 	})
 
+	t.Run("ssl type static no-redirect", func(t *testing.T) {
+		opts.SSL.Type = "static"
+		opts.SSL.Cert = "proxy/testdata/localhost.crt"
+		opts.SSL.Key = "proxy/testdata/localhost.key"
+		opts.SSL.NoHTTPRedirect = true
+		cfg, err := makeSSLConfig()
+		require.NoError(t, err)
+		assert.Equal(t, proxy.SSLStatic, cfg.SSLMode)
+		assert.True(t, cfg.NoHTTPRedirect)
+		opts.SSL.NoHTTPRedirect = false
+	})
+
+	t.Run("ssl type auto no-redirect", func(t *testing.T) {
+		opts.SSL.Type = "auto"
+		opts.SSL.ACMEDirectory = "https://acme.example.com"
+		opts.SSL.ACMELocation = "/var/acme"
+		opts.SSL.NoHTTPRedirect = true
+		opts.SSL.DNS.Type = "none"
+		cfg, err := makeSSLConfig()
+		require.NoError(t, err)
+		assert.Equal(t, proxy.SSLAuto, cfg.SSLMode)
+		assert.True(t, cfg.NoHTTPRedirect)
+		opts.SSL.NoHTTPRedirect = false
+	})
+
 	t.Run("ssl type invalid", func(t *testing.T) {
 		opts.SSL.Type = "invalid"
 		_, err := makeSSLConfig()
