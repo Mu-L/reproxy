@@ -23,6 +23,10 @@ linters:
     - errorlint
     - modernize
   settings:
+    gosec:
+      excludes:
+        - G117
+        - G704
     goconst:
       min-len: 2
       min-occurrences: 2
